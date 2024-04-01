@@ -336,7 +336,7 @@ def defineEvalNormalFn(shaderType, normal, attrNameNormal, attrNameBlend, attrNa
             'const varying State &state)\n')
     text += '{\n'
     text +=('    return evalNormal(obj, tls, state, ' + attrNameNormal +
-            ', ' + attrNameBlend + ', ' + attrNameSpace + ');\n')
+            ', ' + attrNameBlend + ', ' + attrNameSpace + ', true);\n')
     text += '}\n'
 
     return text
