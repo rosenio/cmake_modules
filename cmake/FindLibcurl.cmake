@@ -4,14 +4,14 @@
 find_path(Libcurl_INCLUDE_DIR
   NAMES curl.h
   PATH_SUFFIXES curl
-  HINTS $ENV{LIBCURL_ROOT}/include /usr/include)
+  HINTS $ENV{LIBCURL_ROOT}/include $ENV{Libcurl_ROOT}/include /usr/include)
 
 # need to find <curl/curl.h>
 set(Libcurl_INCLUDE_DIRS ${Libcurl_INCLUDE_DIR}/..)
 
 find_library(Libcurl_LIBRARY
   NAMES libcurl.so.4
-  HINTS $ENV{LIBCURL_ROOT}/lib /lib64)
+  HINTS $ENV{LIBCURL_ROOT}/lib $ENV{Libcurl_ROOT}/lib /lib64)
 
 mark_as_advanced(Libcurl_INCLUDE_DIRS Libcurl_LIBRARY)
 

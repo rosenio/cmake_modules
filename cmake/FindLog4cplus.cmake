@@ -4,14 +4,21 @@
 find_path(Log4cplus_INCLUDE_DIR
     NAMES logger.h
     PATH_SUFFIXES log4cplus
-    HINTS $ENV{LOG4CPLUS_ROOT}/include /usr/local/include)
+    HINTS $ENV{LOG4CPLUS_ROOT}/include $ENV{Log4cplus_ROOT}/include /usr/local/include)
+
 
 # need to find <log4cplus/logger.h>
-set(Log4cplus_INCLUDE_DIRS ${Log4cplus_INCLUDE_DIR}/..)
+if (DEFINED ENV{LOG4CPLUS_ROOT})
+    set(Log4cplus_INCLUDE_DIRS $ENV{LOG4CPLUS_ROOT}/include)
+elseif (DEFINED ENV{Log4cplus_ROOT})
+    set(Log4cplus_INCLUDE_DIRS $ENV{Log4cplus_ROOT}/include)
+else()
+    set(Log4cplus_INCLUDE_DIRS ${Log4cplus_INCLUDE_DIR}/..)
+endif()
 
 find_library(Log4cplus_LIBRARIES
     NAMES log4cplus
-    HINTS $ENV{LOG4CPLUS_ROOT}/lib /usr/local/lib)
+    HINTS $ENV{LOG4CPLUS_ROOT}/lib $ENV{Log4cplus_ROOT}/lib /usr/local/lib)
 
 mark_as_advanced(Log4cplus_INCLUDE_DIR Log4cplus_INCLUDE_DIRS Log4cplus_LIBRARIES)
 

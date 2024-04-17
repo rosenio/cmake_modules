@@ -20,14 +20,14 @@
 find_path(OpenVDB_INCLUDE_DIR
   NAMES openvdb.h
   PATH_SUFFIXES openvdb
-  HINTS $ENV{OPENVDB_ROOT}/include /usr/local/include)
+  HINTS $ENV{OPENVDB_ROOT}/include $ENV{OpenVDB_ROOT}/include /usr/local/include)
 
 # need to find <openvdb/openvdb.h>
 set(OpenVDB_INCLUDE_DIRS ${OpenVDB_INCLUDE_DIR}/..)
 
 find_library(OpenVDB_LIBRARIES
   NAMES openvdb
-  HINTS $ENV{OPENVDB_ROOT}/lib /usr/local/lib)
+  HINTS $ENV{OPENVDB_ROOT}/lib $ENV{OpenVDB_ROOT}/lib /usr/local/lib)
 mark_as_advanced(OpenVDB_INCLUDE_DIR OpenVDB_INCLUDE_DIRS OpenVDB_LIBRARIES)
 
 include(FindPackageHandleStandardArgs)

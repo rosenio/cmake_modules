@@ -20,14 +20,14 @@
 find_path(JsonCpp_INCLUDE_DIR
   NAMES json.h
   PATH_SUFFIXES json jsoncpp/json
-  HINTS $ENV{JSONCPP_ROOT}/include /usr/local/include)
+  HINTS $ENV{JSONCPP_ROOT}/include $ENV{JsonCpp_ROOT}/include /usr/local/include)
 
 # need to find <json/json.h>
 set(JsonCpp_INCLUDE_DIRS ${JsonCpp_INCLUDE_DIR}/..)
 
 find_library(JsonCpp_LIBRARIES
   NAMES json jsoncpp
-  HINTS $ENV{JSONCPP_ROOT}/lib /usr/local/lib)
+  HINTS $ENV{JSONCPP_ROOT}/lib $ENV{JsonCpp_ROOT}/lib /usr/local/lib)
 mark_as_advanced(JsonCpp_INCLUDE_DIR JsonCpp_INCLUDE_DIRS JsonCpp_LIBRARIES)
 
 include(FindPackageHandleStandardArgs)

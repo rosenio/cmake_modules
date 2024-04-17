@@ -18,7 +18,7 @@
 find_path(Random123_INCLUDE_DIR
   NAMES threefry.h
   PATH_SUFFIXES Random123
-  HINTS $ENV{RANDOM123_ROOT}/include /usr/local/include)
+  HINTS $ENV{RANDOM123_ROOT}/include $ENV{Random123_ROOT}/include /usr/local/include)
 
 # need to find <Random123/threefry.h>
 set(Random123_INCLUDE_DIRS ${Random123_INCLUDE_DIR}/..)

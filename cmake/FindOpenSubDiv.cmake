@@ -20,18 +20,18 @@
 find_path(OpenSubDiv_INCLUDE_DIR
   NAMES version.h
   PATH_SUFFIXES opensubdiv
-  HINTS $ENV{OPENSUBDIV_ROOT}/include /usr/local/include)
+  HINTS $ENV{OPENSUBDIV_ROOT}/include $ENV{OpenSubDiv_ROOT}/include /usr/local/include)
 
 # need to find <opensubdiv/version.h>
 set(OpenSubDiv_INCLUDE_DIRS ${OpenSubDiv_INCLUDE_DIR}/..)
 
 find_library(OpenSubDiv_CPU_LIBRARY
   NAMES osdCPU
-  HINTS $ENV{OPENSUBDIV_ROOT}/lib /usr/local/lib)
+  HINTS $ENV{OPENSUBDIV_ROOT}/lib $ENV{OpenSubDiv_ROOT}/lib /usr/local/lib)
 
 find_library(OpenSubDiv_GPU_LIBRARY
   NAMES osdGPU
-  HINTS $ENV{OPENSUBDIV_ROOT}/lib /usr/local/lib)
+  HINTS $ENV{OPENSUBDIV_ROOT}/lib $ENV{OpenSubDiv_ROOT}/lib /usr/local/lib)
 
 set(OpenSubDiv_LIBRARIES "${OpenSubDiv_CPU_LIBRARY};${OpenSubDiv_GPU_LIBRARY}")
 

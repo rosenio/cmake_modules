@@ -4,14 +4,14 @@
 find_path(CppUnit_INCLUDE_DIR
     NAMES Test.h TestResult.h
     PATH_SUFFIXES cppunit
-    HINTS $ENV{CPPUNIT_ROOT}/include /usr/local/include)
+    HINTS $ENV{CPPUNIT_ROOT}/include $ENV{CppUnit_ROOT}/include /usr/local/include)
 
 # need to find <cppunit/Test.h>
 set(CppUnit_INCLUDE_DIRS ${CppUnit_INCLUDE_DIR}/..)
 
 find_library(CppUnit_LIBRARIES
     NAMES cppunit
-    HINTS $ENV{CPPUNIT_ROOT}/lib /usr/local/lib)
+    HINTS $ENV{CPPUNIT_ROOT}/lib $ENV{CppUnit_ROOT}/lib /usr/local/lib)
 
 mark_as_advanced(CppUnit_INCLUDE_DIR CppUnit_INCLUDE_DIRS CppUnit_LIBRARIES)
 

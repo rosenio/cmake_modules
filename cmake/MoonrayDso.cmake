@@ -1,6 +1,8 @@
 # Copyright 2023-2024 DreamWorks Animation LLC
 # SPDX-License-Identifier: Apache-2.0
 
+include(OMR_Platform)
+
 function(Moonray_dso_cxx_compile_options target)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_compile_options(${target}
@@ -55,27 +57,102 @@ function(Moonray_dso_cxx_compile_options target)
 endfunction()
 
 function(Moonray_dso_ispc_compile_options target)
-    target_compile_options(${target}
-        PRIVATE
-            --opt=force-aligned-memory          # always issue "aligned" vector load and store instructions
-            --pic                               # Generate position-independent code.  Ignored for Windows target
-            --werror                            # Treat warnings as errors
-            --wno-perf                          # Don't issue warnings related to performance-related issues
-
-            $<$<CONFIG:DEBUG>:
-                --dwarf-version=2               # use DWARF version 2 for debug symbols
-            >
-
-            $<$<CONFIG:RELWITHDEBINFO>:
-                -O3                             # the default is -O2 for RELWITHDEBINFO
-                --dwarf-version=2               # use DWARF version 2 for debug symbols
-                --opt=disable-assertions        # disable all of the assertions
-            >
-
-            $<$<CONFIG:RELEASE>:
-                --opt=disable-assertions        # disable all of the assertions
-            >
+    set(commonOptions
+        ${GLOBAL_ISPC_FLAGS}
+        --opt=force-aligned-memory          # always issue "aligned" vector load and store instructions
+        --pic                               # Generate position-independent code.  Ignored for Windows target
+        #--werror                            # Treat warnings as errors
+        --wno-perf                          # Don't issue warnings related to performance-related issues
     )
+    set_property(TARGET ${target}
+                 PROPERTY TARGET_OBJECTS $<TARGET_OBJECTS:${target}>)
+    set_property(TARGET ${target}
+                 PROPERTY DEPENDENCY "")
+    check_language(ISPC)
+    if(NOT CMAKE_ISPC_COMPILER)
+        get_target_property(SOURCES ${target} SOURCES)
+        get_target_property(ISPC_HEADER_SUFFIX ${target} ISPC_HEADER_SUFFIX)
+        get_target_property(ISPC_HEADER_DIRECTORY ${target} ISPC_HEADER_DIRECTORY)
+        get_target_property(ISPC_INSTRUCTION_SETS ${target} ISPC_INSTRUCTION_SETS)
+
+        set(configDepFlags "")
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+            set(configDepFlags
+                    -g                              # emit debug info
+                    --dwarf-version=2               # use DWARF version 2 for debug symbols
+                )
+        elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+            set(configDepFlags
+                    -g                              # emit debug info
+                    -O3                             # the default is -O2 for RELWITHDEBINFO
+                    --dwarf-version=2               # use DWARF version 2 for debug symbols
+                    --opt=disable-assertions        # disable all of the assertions
+                )
+        elseif (CMAKE_BUILD_TYPE STREQUAL "Release")
+            set(configDepFlags
+                    --opt=disable-assertions        # disable all of the assertions
+                )
+        endif()
+
+        foreach(src ${SOURCES})
+            get_filename_component(srcExt ${src} LAST_EXT)
+
+            if (NOT srcExt STREQUAL ".ispc")
+                continue()
+            endif()
+
+            get_filename_component(srcName ${src} NAME_WE)
+
+            set(objOut "${CMAKE_CURRENT_BINARY_DIR}/${srcName}.o")
+            set(depFile "${CMAKE_CURRENT_BINARY_DIR}/${srcName}.dep")
+            add_custom_command(
+                OUTPUT ${objOut}
+                COMMAND ${ISPC_COMPILER} ${CMAKE_CURRENT_SOURCE_DIR}/${src}
+                    -o ${objOut}
+                    -h "./${ISPC_HEADER_DIRECTORY}/${srcName}${ISPC_HEADER_SUFFIX}"
+                    -M -MF ${depFile}
+                    --arch=aarch64                      # TODO: hardcoded...
+                    --target=${ISPC_INSTRUCTION_SETS}
+                    --target-os=macos
+                    ${commonOptions}
+                    ${configDepFlags}
+                    "-I$<JOIN:$<TARGET_PROPERTY:${target},INCLUDE_DIRECTORIES>,;-I>"
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                COMMAND_EXPAND_LISTS
+                VERBATIM
+                DEPFILE ${depFile}
+                DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${src})
+            list(APPEND ISPC_TARGET_OBJECTS ${objOut})
+        endforeach()
+        target_link_libraries(${target}
+                PRIVATE ${ISPC_TARGET_OBJECTS})
+        add_custom_target(${target}_ispc_dep DEPENDS ${ISPC_TARGET_OBJECTS})
+        add_dependencies(${target} ${target}_ispc_dep)
+        set_property(TARGET ${target}
+                 PROPERTY DEPENDENCY ${target}_ispc_dep)
+        set_property(
+                TARGET ${target}
+                PROPERTY
+                    TARGET_OBJECTS ${ISPC_TARGET_OBJECTS})
+    else ()
+        target_compile_options(${target}
+            PRIVATE
+                ${commonOptions}
+                $<$<CONFIG:DEBUG>:
+                    --dwarf-version=2               # use DWARF version 2 for debug symbols
+                >
+
+                $<$<CONFIG:RELWITHDEBINFO>:
+                    -O3                             # the default is -O2 for RELWITHDEBINFO
+                    --dwarf-version=2               # use DWARF version 2 for debug symbols
+                    --opt=disable-assertions        # disable all of the assertions
+                >
+
+                $<$<CONFIG:RELEASE>:
+                    --opt=disable-assertions        # disable all of the assertions
+                >
+        )
+    endif()
 endfunction()
 
 function(Moonray_dso_cxx_compile_definitions target)
@@ -86,7 +163,7 @@ function(Moonray_dso_cxx_compile_definitions target)
 
     target_compile_definitions(${target}
         PRIVATE
-            __AVX__                             # TODO: add comment
+            ${GLOBAL_CPP_FLAGS}                 # TODO: add comment
             BOOST_FILESYSTEM_VERSION=3          # TODO: add comment
             DWA_BOOST_VERSION=1073000           # TODO: add comment
             OPENVDB_USE_BLOSC                   # TODO: Move this to where it is needed?
@@ -100,6 +177,8 @@ function(Moonray_dso_cxx_compile_definitions target)
             PDI_OGL                             # TODO: add comment
             PDI_pc                              # TODO: add comment
             PDI_USE_GLX_1_3                     # TODO: add comment
+            _LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR=1 # Clang - enable auto_ptr when targeting c++17
+            _LIBCPP_ENABLE_CXX17_REMOVED_RANDOM_SHUFFLE=1 # Clang - ensure std::random_shuffle is available
 
             $<$<BOOL:${MOONRAY_DWA_BUILD}>:
                 DWA_OPENVDB                     # Enables some SIMD computations in DWA's version of openvdb
@@ -129,10 +208,18 @@ function(Moonray_dso_cxx_compile_features target)
 endfunction()
 
 function(Moonray_dso_link_options target)
-    target_link_options(${target}
-        PRIVATE
-            -Wl,--enable-new-dtags              # Use RUNPATH instead of RPATH
+    if(NOT IsDarwinPlatform)
+        target_link_options(${target}
+            PRIVATE
+                -Wl,--enable-new-dtags              # Use RUNPATH instead of RPATH
+        )
+    else()
+        target_link_options(${target}
+            PRIVATE
+                -Wl,-ld_classic
+                -undefined dynamic_lookup
     )
+    endif()
 endfunction()
 
 # Create a DSO target from .cc, and attribute.cc sources
@@ -177,6 +264,9 @@ function(moonray_dso_simple targetName)
 
     # full dso
     set_target_properties(${targetName} PROPERTIES PREFIX "") # removes "lib" prefix from .so
+    if(IsDarwinPlatform)
+        set_target_properties(${targetName} PROPERTIES SUFFIX ".so") # switch .dylib for .so
+    endif()
     target_sources(${targetName} PRIVATE ${src})
     target_include_directories(${targetName} PRIVATE ${includeDir})
     target_link_libraries(${targetName} PUBLIC ${ARG_DEPENDENCIES})
@@ -196,29 +286,32 @@ function(moonray_dso_simple targetName)
     Moonray_dso_cxx_compile_options(${targetName}_proxy)
     Moonray_dso_link_options(${targetName}_proxy)
 
-    # json class file
-    if (NOT ARG_TEST_DSO)
-        # Defines a custom command that when run generates the json files
-        # needed for third party apps
-        add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json
-            POST_BUILD
-            COMMAND rdl2_json_exporter --dso_path ${CMAKE_CURRENT_BINARY_DIR}
-            --in $<TARGET_FILE:${targetName}_proxy>
-            --out ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json
-            DEPENDS ${targetName}_proxy
-            BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json
-            VERBATIM
-            )
-        add_custom_target(coredata_${targetName} ALL DEPENDS
-            ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json)
+   # json class file
+   if (NOT ARG_TEST_DSO)
+       if (XCODE)
+           set(configDir "${CMAKE_BUILD_TYPE}")
+       endif()
+       # Defines a custom command that when run generates the json files
+       # needed for third party apps
+       add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json
+           POST_BUILD
+           COMMAND rdl2_json_exporter --dso_path ${CMAKE_CURRENT_BINARY_DIR}/${configDir}
+           --in $<TARGET_FILE:${targetName}_proxy>
+           --out ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json
+           DEPENDS ${targetName}_proxy
+           BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json
+           VERBATIM
+           )
+       add_custom_target(coredata_${targetName} ALL DEPENDS
+           ${CMAKE_CURRENT_BINARY_DIR}/${dsoName}.json)
 
-        # copy resulting DSOs to <build>/rdl2dso dir to be found by tests
-        add_custom_command(TARGET ${targetName} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/rdl2dso
-            COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${targetName}> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${targetName}>
-            COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${targetName}_proxy> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${targetName}_proxy>
-        )
-    endif()
+       # copy resulting DSOs to <build>/rdl2dso dir to be found by tests
+       add_custom_command(TARGET ${targetName} POST_BUILD
+           COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/rdl2dso
+           COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${targetName}> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${targetName}>
+           COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${targetName}_proxy> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${targetName}_proxy>
+       )
+   endif()
 
     if (NOT ARG_SKIP_INSTALL)
         install(TARGETS ${targetName} COMPONENT ${targetName}
@@ -295,48 +388,58 @@ function(moonray_ispc_dso name)
             ${CMAKE_COMMAND} -E make_directory ${genDir}
     )
 
-    # autogenerate sources attributes.cc etc
-    add_custom_command( OUTPUT
-                            ${genDir}/attributes.cc
-                            ${genDir}/attributesISPC.cc
-                            ${genDir}/attributes.isph
-                            ${genDir}/labels.h
-                            ${genDir}/labels.isph
-                        DEPENDS
-                           ${name}_make_build_dir
-                           ${jsonSrc}
-                        WORKING_DIRECTORY
-                            ${CMAKE_CURRENT_LIST_DIR}
-                        COMMAND
-                            ${PYTHON_EXECUTABLE} ${ISPC_DSO_GEN_SCRIPT} ${jsonSrc}
-                            -o ${genDir} -i ${jsonIncludeDir}
+    add_custom_target(${name}_gen_files
+        COMMAND
+            ${ISPC_DSO_GEN_SCRIPT} ${jsonSrc}
+            -o ${genDir} -i ${jsonIncludeDir}
+        BYPRODUCTS
+            ${genDir}/attributes.cc
+            ${genDir}/attributesISPC.cc
+            ${genDir}/attributes.isph
+            ${genDir}/labels.h
+            ${genDir}/labels.isph
+        DEPENDS
+            ${name}_make_build_dir
+            # ${jsonSrc}
+        WORKING_DIRECTORY
+            ${CMAKE_CURRENT_LIST_DIR}
     )
 
     # compile ispc to .o
     set(objLib ${name}_objlib)
-    add_library(${objLib} OBJECT)
-    target_sources(${objLib} PRIVATE ${ispcSrc} ${genDir}/attributes.isph)
+    add_library(${objLib} OBJECT ${ispcSrc} ${genDir}/attributes.isph)
     target_include_directories(${objLib} PRIVATE ${genDir})
     file(RELATIVE_PATH relBinDir ${CMAKE_BINARY_DIR} ${genDir})
     set_target_properties(${objLib} PROPERTIES
         ISPC_HEADER_SUFFIX _ispc_stubs.h
         ISPC_HEADER_DIRECTORY /${relBinDir}
-        ISPC_INSTRUCTION_SETS avx1-i32x8
+        ISPC_INSTRUCTION_SETS ${GLOBAL_ISPC_INSTRUCTION_SETS}
+        LINKER_LANGUAGE CXX
     )
     target_link_libraries(${objLib} PRIVATE ${ARG_DEPENDENCIES})
     Moonray_dso_ispc_compile_options(${objLib})
 
+    get_target_property(objLibDeps ${objLib} DEPENDENCY)
+    if(NOT objLibDeps STREQUAL "")
+        add_dependencies(${objLibDeps}
+            ${ARG_DEPENDENCIES}
+            ${name}_gen_files)
+    endif()
+
     # full dso
     add_library(${name} SHARED "")
     set_target_properties(${name} PROPERTIES PREFIX "") # removes "lib" prefix from .so
+    set_target_properties(${name} PROPERTIES SUFFIX ".so")
+    get_target_property(ISPC_TARGET_OBJECTS ${objLib} TARGET_OBJECTS)
     target_sources(${name}
             PRIVATE
                 ${ccSrc}
                 ${genDir}/attributesISPC.cc
-                $<TARGET_OBJECTS:${objLib}>
+                ${ISPC_TARGET_OBJECTS}
     )
     target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${genDir})
     target_link_libraries(${name} PUBLIC ${ARG_DEPENDENCIES})
+    add_dependencies(${name} ${objLib})
     Moonray_dso_cxx_compile_definitions(${name})
     Moonray_dso_cxx_compile_features(${name})
     Moonray_dso_cxx_compile_options(${name})
@@ -346,35 +449,40 @@ function(moonray_ispc_dso name)
     add_library(${name}_proxy SHARED "")
     set_target_properties(${name}_proxy PROPERTIES
         PREFIX "" OUTPUT_NAME ${name} SUFFIX ".so.proxy")
+    target_compile_features(${name}_proxy
+        PRIVATE cxx_std_17)
     target_sources(${name}_proxy PRIVATE ${genDir}/attributes.cc)
     target_include_directories(${name}_proxy PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(${name}_proxy PUBLIC SceneRdl2::scene_rdl2)
     Moonray_dso_cxx_compile_options(${name}_proxy)
     Moonray_dso_link_options(${name}_proxy)
 
-    # json class file
-    if (NOT ARG_TEST_DSO)
-        # Defines a custom command that when run generates the json files
-        # needed for third party apps
-        add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
-            POST_BUILD
-            COMMAND rdl2_json_exporter --dso_path ${CMAKE_CURRENT_BINARY_DIR}
-            --in $<TARGET_FILE:${name}_proxy>
-            --out ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
-            DEPENDS ${name}_proxy
-            BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
-            VERBATIM
-            )
-        add_custom_target(coredata_${name} ALL DEPENDS
-            ${CMAKE_CURRENT_BINARY_DIR}/${name}.json)
+   # json class file
+   if (NOT ARG_TEST_DSO)
+       if (XCODE)
+           set(configDir "${CMAKE_BUILD_TYPE}")
+       endif()
+       # Defines a custom command that when run generates the json files
+       # needed for third party apps
+       add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
+           POST_BUILD
+           COMMAND rdl2_json_exporter --dso_path ${CMAKE_CURRENT_BINARY_DIR}/${configDir}
+           --in $<TARGET_FILE:${name}_proxy>
+           --out ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
+           DEPENDS ${name}_proxy
+           BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
+           VERBATIM
+           )
+       add_custom_target(coredata_${name} ALL DEPENDS
+           ${CMAKE_CURRENT_BINARY_DIR}/${name}.json)
 
-        # copy resulting DSO to <build>/rdl2dso dir to be found by tests
-        add_custom_command(TARGET ${name} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/rdl2dso
-            COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${name}> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${name}>
-            COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${name}_proxy> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${name}_proxy>
-        )
-    endif()
+       # copy resulting DSO to <build>/rdl2dso dir to be found by tests
+       add_custom_command(TARGET ${name} POST_BUILD
+           COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/rdl2dso
+           COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${name}> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${name}>
+           COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE:${name}_proxy> ${CMAKE_BINARY_DIR}/rdl2dso/$<TARGET_FILE_NAME:${name}_proxy>
+       )
+   endif()
 
     if (NOT ARG_SKIP_INSTALL)
         install(TARGETS ${name} COMPONENT ${name}
@@ -388,7 +496,7 @@ function(moonray_ispc_dso name)
         if (NOT ARG_TEST_DSO)
             install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${name}.json
                 COMPONENT ${name} DESTINATION coredata
-                )
+            )
         endif()
     endif()
 endfunction()
