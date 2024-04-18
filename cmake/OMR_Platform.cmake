@@ -73,3 +73,14 @@ else() # Linux/Windows
     set(GLOBAL_ISPC_INSTRUCTION_SETS avx2-i32x8)
 endif()
 
+# ================================================
+# Options
+# ================================================
+if(IsLinuxPlatform)
+    option(MOONRAY_USE_OPTIX "Whether to enable XPU mode and Optix denoising" YES)
+elseif(IsDarwinPlatform)
+    option(MOONRAY_USE_METAL "Whether to enable XPU mode and OIDN Metal denoising" YES)
+endif()
+
+
+
