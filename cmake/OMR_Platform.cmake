@@ -57,8 +57,10 @@ if(IsDarwinPlatform)
         set(CMAKE_CXX_STANDARD 17)
     endif()
 
+    # Ignore Homebrew packages
     set(CMAKE_IGNORE_PATH /opt/homebrew)
     set(CMAKE_IGNORE_PREFIX_PATH /opt/homebrew)
+
     set(ISPC_COMPILER $ENV{ISPC} CACHE STRING "Path to ISPC compiler")
     set(CMAKE_XCODE_ATTRIBUTE_OTHER_CODE_SIGN_FLAGS "-o linker-signed")
     set(GLOBAL_LINK_FLAGS "-Wl,-ld_classic")
