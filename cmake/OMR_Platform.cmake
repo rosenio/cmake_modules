@@ -71,7 +71,7 @@ if(IsDarwinPlatform)
 else() # Linux/Windows
     set(GLOBAL_CPP_FLAGS __AVX__)
     set(GLOBAL_LINK_FLAGS "-Wl,--enable-new-dtags")
-    set(GLOBAL_INSTALL_RPATH "$ORIGIN $ORIGIN/../lib64 ${COMPILER_LIBRARY_DIR}")
+    set(GLOBAL_INSTALL_RPATH "$ORIGIN" "$ORIGIN/../lib64" "${COMPILER_LIBRARY_DIR}")
     set(GLOBAL_ISPC_INSTRUCTION_SETS avx2-i32x8)
 endif()
 
